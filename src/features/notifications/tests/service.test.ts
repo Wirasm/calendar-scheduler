@@ -131,4 +131,68 @@ describe("sendBookingConfirmation - email content", () => {
     expect(attendeePayload.html).not.toContain("<img");
     expect(attendeePayload.html).toContain("&lt;img");
   });
+
+  it("escapes HTML in eventTypeName", async () => {
+    const dataWithHtml = { ...mockEmailData, eventTypeName: "<script>alert('xss')</script>" };
+
+    await sendBookingConfirmation(dataWithHtml);
+
+    const calls = mockSend.mock.calls;
+    const attendeePayload = calls[0]?.[0] as { html: string };
+
+    expect(attendeePayload.html).not.toContain("<script>");
+    expect(attendeePayload.html).toContain("&lt;script&gt;");
+  });
+
+  it("omits message section in attendee email when message is null", async () => {
+    const dataWithoutMessage = { ...mockEmailData, attendeeMessage: null };
+
+    await sendBookingConfirmation(dataWithoutMessage);
+
+    const calls = mockSend.mock.calls;
+    const attendeePayload = calls[0]?.[0] as { html: string };
+
+    expect(attendeePayload.html).not.toContain("Your message:");
+  });
+
+  it("shows 'No message provided' in consultant email when message is null", async () => {
+    const dataWithoutMessage = { ...mockEmailData, attendeeMessage: null };
+
+    await sendBookingConfirmation(dataWithoutMessage);
+
+    const calls = mockSend.mock.calls;
+    const consultantPayload = calls[1]?.[0] as { html: string };
+
+    expect(consultantPayload.html).toContain("No message provided.");
+  });
+});
+
+describe("sendBookingConfirmation - error handling", () => {
+  beforeEach(() => {
+    mockSend.mockReset();
+  });
+
+  it("throws when attendee email returns success but no ID", async () => {
+    mockSend.mockResolvedValueOnce({ data: null, error: null });
+
+    await expect(sendBookingConfirmation(mockEmailData)).rejects.toThrow(
+      "Email service returned success but no email ID",
+    );
+  });
+
+  it("throws when consultant email returns success but no ID", async () => {
+    mockSend
+      .mockResolvedValueOnce({ data: { id: "email_123" }, error: null })
+      .mockResolvedValueOnce({ data: null, error: null });
+
+    await expect(sendBookingConfirmation(mockEmailData)).rejects.toThrow(
+      "Email service returned success but no email ID",
+    );
+  });
+
+  it("throws EmailSendFailedError when network error occurs", async () => {
+    mockSend.mockRejectedValueOnce(new Error("Network timeout"));
+
+    await expect(sendBookingConfirmation(mockEmailData)).rejects.toThrow("Network timeout");
+  });
 });

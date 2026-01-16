@@ -1,8 +1,8 @@
 import type { BookingConfirmationEmailData } from "./schemas";
 
 /**
- * Format a date for display in emails.
- * Uses locale-aware formatting with timezone.
+ * Format a date for display in emails using en-US locale.
+ * Includes weekday, full date, time, and timezone abbreviation.
  */
 function formatDateTime(date: Date): string {
   return date.toLocaleString("en-US", {
@@ -31,7 +31,8 @@ function escapeHtml(text: string): string {
 }
 
 /**
- * Get human-readable duration text.
+ * Convert time range to human-readable duration (e.g., "30 minutes", "1 hour 15 minutes").
+ * Rounds to the nearest minute.
  */
 function getDurationText(start: Date, end: Date): string {
   const minutes = Math.round((end.getTime() - start.getTime()) / (1000 * 60));

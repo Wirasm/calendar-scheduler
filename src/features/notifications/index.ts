@@ -1,9 +1,9 @@
-// Export types and schemas
-
-export type { NotificationErrorCode } from "./errors";
 // Export errors
-export { EmailSendFailedError, EmailTemplateError, InvalidRecipientEmailError } from "./errors";
-export type { BookingConfirmationEmailData, EmailSendResult } from "./schemas";
+export type { NotificationErrorCode } from "./errors";
+export { EmailSendFailedError, NotificationError } from "./errors";
+
+// Export types and schemas
+export type { BookingConfirmationEmailData } from "./schemas";
 export { BookingConfirmationEmailSchema } from "./schemas";
 
 // Export service functions

@@ -1,10 +1,7 @@
 import type { HttpStatusCode } from "@/core/api/errors";
 
-/** Known error codes for notification operations. */
-export type NotificationErrorCode =
-  | "EMAIL_SEND_FAILED"
-  | "INVALID_RECIPIENT_EMAIL"
-  | "EMAIL_TEMPLATE_ERROR";
+/** Error codes for notification operations. */
+export type NotificationErrorCode = "EMAIL_SEND_FAILED";
 
 /**
  * Base error for notification-related errors.
@@ -21,29 +18,12 @@ export class NotificationError extends Error {
   }
 }
 
-/** Thrown when email sending fails via Resend API. */
+/** Thrown when email sending fails via Resend API or network error occurs. */
 export class EmailSendFailedError extends NotificationError {
   constructor(recipient: string, reason?: string) {
     const message = reason
       ? `Failed to send email to ${recipient}: ${reason}`
       : `Failed to send email to ${recipient}`;
     super(message, "EMAIL_SEND_FAILED", 500);
-  }
-}
-
-/** Thrown when recipient email is invalid. */
-export class InvalidRecipientEmailError extends NotificationError {
-  constructor(email: string) {
-    super(`Invalid recipient email: ${email}`, "INVALID_RECIPIENT_EMAIL", 400);
-  }
-}
-
-/** Thrown when email template generation fails. */
-export class EmailTemplateError extends NotificationError {
-  constructor(templateName: string, reason?: string) {
-    const message = reason
-      ? `Failed to generate email template '${templateName}': ${reason}`
-      : `Failed to generate email template '${templateName}'`;
-    super(message, "EMAIL_TEMPLATE_ERROR", 500);
   }
 }
