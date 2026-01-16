@@ -39,6 +39,9 @@ export const env = {
 
   // Database config (required)
   DATABASE_URL: getRequiredEnv("DATABASE_URL"),
+
+  // Email config (Resend) - optional, validated at runtime when sending emails
+  RESEND_API_KEY: getOptionalEnv("RESEND_API_KEY", ""),
 } as const;
 
 export type Env = typeof env;
