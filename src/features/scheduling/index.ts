@@ -58,4 +58,10 @@ export {
 // ============================================================================
 // Service functions
 // ============================================================================
-// TODO: Add service exports once repository and business logic are implemented
+export {
+  createAvailabilityWindow,
+  deleteAvailabilityWindow,
+  getAvailabilityWindow,
+  getAvailabilityWindowsByUser,
+  updateAvailabilityWindow,
+} from "./service";

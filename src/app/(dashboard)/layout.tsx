@@ -30,6 +30,12 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
             <a href="/dashboard/projects" className="text-muted-foreground hover:text-foreground">
               Projects
             </a>
+            <a
+              href="/dashboard/scheduling/availability"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              Scheduling
+            </a>
           </nav>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground">{user.email}</span>
