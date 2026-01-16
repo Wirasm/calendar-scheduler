@@ -12,6 +12,7 @@ export {
   AvailabilityWindowOverlapError,
   EventTypeNotFoundError,
   EventTypeSlugExistsError,
+  NoAvailabilityConfiguredError,
   SchedulingAccessDeniedError,
   SchedulingDatabaseError,
   SchedulingError,
@@ -40,6 +41,8 @@ export type {
   CreateAvailabilityWindowInput,
   CreateEventTypeInput,
   EventTypeResponse,
+  GetAvailableSlotsInput,
+  TimeSlot,
   UpdateAvailabilityWindowInput,
   UpdateEventTypeInput,
 } from "./schemas";
@@ -52,6 +55,8 @@ export {
   CreateAvailabilityWindowSchema,
   CreateEventTypeSchema,
   EventTypeResponseSchema,
+  GetAvailableSlotsSchema,
+  TimeSlotSchema,
   UpdateAvailabilityWindowSchema,
   UpdateEventTypeSchema,
 } from "./schemas";
@@ -64,5 +69,7 @@ export {
   deleteAvailabilityWindow,
   getAvailabilityWindow,
   getAvailabilityWindowsByUser,
+  getAvailableSlots,
   updateAvailabilityWindow,
+  validateSlotAvailable,
 } from "./service";

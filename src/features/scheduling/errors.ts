@@ -6,6 +6,7 @@ export type SchedulingErrorCode =
   | "EVENT_TYPE_SLUG_EXISTS"
   | "AVAILABILITY_WINDOW_NOT_FOUND"
   | "AVAILABILITY_WINDOW_OVERLAP"
+  | "NO_AVAILABILITY_CONFIGURED"
   | "APPOINTMENT_NOT_FOUND"
   | "APPOINTMENT_SLOT_UNAVAILABLE"
   | "APPOINTMENT_OUTSIDE_AVAILABILITY"
@@ -63,6 +64,17 @@ export class AvailabilityWindowOverlapError extends SchedulingError {
   }
 }
 
+/** Thrown when a consultant has no availability windows configured. */
+export class NoAvailabilityConfiguredError extends SchedulingError {
+  constructor(userId: string) {
+    super(
+      `Consultant has no availability windows configured: ${userId}`,
+      "NO_AVAILABILITY_CONFIGURED",
+      404,
+    );
+  }
+}
+
 /** Thrown when an appointment cannot be found by ID. */
 export class AppointmentNotFoundError extends SchedulingError {
   constructor(identifier: string) {
@@ -83,8 +95,12 @@ export class AppointmentSlotUnavailableError extends SchedulingError {
 
 /** Thrown when the requested appointment time falls outside the consultant's availability windows. */
 export class AppointmentOutsideAvailabilityError extends SchedulingError {
-  constructor() {
-    super("Requested time is outside available hours", "APPOINTMENT_OUTSIDE_AVAILABILITY", 400);
+  constructor(startTime: Date) {
+    super(
+      `Requested time is outside of available hours: ${startTime.toISOString()}`,
+      "APPOINTMENT_OUTSIDE_AVAILABILITY",
+      400,
+    );
   }
 }
 

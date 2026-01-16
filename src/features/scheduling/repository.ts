@@ -1,10 +1,14 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte, lte, ne } from "drizzle-orm";
 
 import { db } from "@/core/database/client";
 
 import { SchedulingDatabaseError } from "./errors";
-import type { AvailabilityWindow, NewAvailabilityWindow } from "./models";
-import { availabilityWindows } from "./models";
+import type { Appointment, AvailabilityWindow, EventType, NewAvailabilityWindow } from "./models";
+import { appointments, availabilityWindows, eventTypes } from "./models";
+
+// ============================================================================
+// Availability Window Repository
+// ============================================================================
 
 export async function findById(id: string): Promise<AvailabilityWindow | undefined> {
   const results = await db
@@ -58,4 +62,66 @@ export async function deleteById(id: string): Promise<boolean> {
     .where(eq(availabilityWindows.id, id))
     .returning();
   return results.length > 0;
+}
+
+// ============================================================================
+// Event Type Repository
+// ============================================================================
+
+export async function findEventTypeById(id: string): Promise<EventType | undefined> {
+  const results = await db.select().from(eventTypes).where(eq(eventTypes.id, id)).limit(1);
+  return results[0];
+}
+
+export async function findEventTypeBySlugAndUser(
+  slug: string,
+  userId: string,
+): Promise<EventType | undefined> {
+  const results = await db
+    .select()
+    .from(eventTypes)
+    .where(and(eq(eventTypes.slug, slug), eq(eventTypes.userId, userId)))
+    .limit(1);
+  return results[0];
+}
+
+export async function findActiveEventTypesByUser(userId: string): Promise<EventType[]> {
+  return db
+    .select()
+    .from(eventTypes)
+    .where(and(eq(eventTypes.userId, userId), eq(eventTypes.isActive, true)));
+}
+
+// ============================================================================
+// Availability Window Repository (for slot generation)
+// ============================================================================
+
+export async function findAvailabilityWindowsByUser(userId: string): Promise<AvailabilityWindow[]> {
+  return db.select().from(availabilityWindows).where(eq(availabilityWindows.userId, userId));
+}
+
+// ============================================================================
+// Appointment Repository
+// ============================================================================
+
+export async function findAppointmentsByUserAndDateRange(
+  userId: string,
+  startDate: Date,
+  endDate: Date,
+  excludeCancelled?: boolean,
+): Promise<Appointment[]> {
+  const conditions = [
+    eq(appointments.userId, userId),
+    lte(appointments.startTime, endDate),
+    gte(appointments.endTime, startDate),
+  ];
+
+  if (excludeCancelled) {
+    conditions.push(ne(appointments.status, "cancelled"));
+  }
+
+  return db
+    .select()
+    .from(appointments)
+    .where(and(...conditions));
 }
