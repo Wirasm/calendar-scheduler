@@ -9,7 +9,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -75,9 +74,6 @@ export function AvailabilityForm({ editWindow, onClose, open }: AvailabilityForm
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogTrigger asChild>
-        <Button>+ Add Availability</Button>
-      </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Availability" : "Add Availability"}</DialogTitle>

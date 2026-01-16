@@ -11,7 +11,8 @@ export type SchedulingErrorCode =
   | "APPOINTMENT_OUTSIDE_AVAILABILITY"
   | "APPOINTMENT_INSUFFICIENT_NOTICE"
   | "APPOINTMENT_TOO_FAR_ADVANCE"
-  | "SCHEDULING_ACCESS_DENIED";
+  | "SCHEDULING_ACCESS_DENIED"
+  | "SCHEDULING_DATABASE_ERROR";
 
 /**
  * Base error for scheduling-related errors.
@@ -113,5 +114,12 @@ export class AppointmentTooFarAdvanceError extends SchedulingError {
 export class SchedulingAccessDeniedError extends SchedulingError {
   constructor(resource: string) {
     super(`Access denied to scheduling resource: ${resource}`, "SCHEDULING_ACCESS_DENIED", 403);
+  }
+}
+
+/** Thrown when a database operation fails unexpectedly. */
+export class SchedulingDatabaseError extends SchedulingError {
+  constructor(operation: string) {
+    super(`Database operation failed: ${operation}`, "SCHEDULING_DATABASE_ERROR", 500);
   }
 }

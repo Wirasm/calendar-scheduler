@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 
 import { db } from "@/core/database/client";
 
+import { SchedulingDatabaseError } from "./errors";
 import type { AvailabilityWindow, NewAvailabilityWindow } from "./models";
 import { availabilityWindows } from "./models";
 
@@ -34,7 +35,7 @@ export async function create(data: NewAvailabilityWindow): Promise<AvailabilityW
   const results = await db.insert(availabilityWindows).values(data).returning();
   const window = results[0];
   if (!window) {
-    throw new Error("Failed to create availability window");
+    throw new SchedulingDatabaseError("create availability window");
   }
   return window;
 }

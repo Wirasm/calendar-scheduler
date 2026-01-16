@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 
+import { getLogger } from "@/core/logging";
 import { createClient } from "@/core/supabase/server";
+
+const logger = getLogger("scheduling.actions");
+
 import {
   CreateAvailabilityWindowSchema,
   createAvailabilityWindow,
@@ -15,6 +19,33 @@ import {
 export interface AvailabilityActionState {
   error?: string;
   success?: boolean;
+}
+
+type UpdateInput = { dayOfWeek?: number; startTime?: string; endTime?: string };
+type ParseResult = { input: UpdateInput } | { error: string };
+
+function parseOptionalUpdateFields(formData: FormData): ParseResult {
+  const dayOfWeek = formData.get("dayOfWeek");
+  const startTime = formData.get("startTime");
+  const endTime = formData.get("endTime");
+
+  const input: UpdateInput = {};
+
+  if (dayOfWeek !== null && dayOfWeek !== "") {
+    const parsed = Number(dayOfWeek);
+    if (Number.isNaN(parsed)) {
+      return { error: "Day of week must be a valid number" };
+    }
+    input.dayOfWeek = parsed;
+  }
+  if (startTime !== null && startTime !== "") {
+    input.startTime = String(startTime);
+  }
+  if (endTime !== null && endTime !== "") {
+    input.endTime = String(endTime);
+  }
+
+  return { input };
 }
 
 export async function createAvailabilityWindowAction(
@@ -30,11 +61,31 @@ export async function createAvailabilityWindowAction(
     return { error: "Unauthorized" };
   }
 
-  const dayOfWeek = Number(formData.get("dayOfWeek"));
-  const startTime = formData.get("startTime") as string;
-  const endTime = formData.get("endTime") as string;
+  const dayOfWeekRaw = formData.get("dayOfWeek");
+  const startTime = formData.get("startTime");
+  const endTime = formData.get("endTime");
 
-  const result = CreateAvailabilityWindowSchema.safeParse({ dayOfWeek, startTime, endTime });
+  // Validate required fields before type conversion
+  if (dayOfWeekRaw === null || dayOfWeekRaw === "") {
+    return { error: "Day of week is required" };
+  }
+  if (startTime === null || startTime === "") {
+    return { error: "Start time is required" };
+  }
+  if (endTime === null || endTime === "") {
+    return { error: "End time is required" };
+  }
+
+  const dayOfWeek = Number(dayOfWeekRaw);
+  if (Number.isNaN(dayOfWeek)) {
+    return { error: "Day of week must be a valid number" };
+  }
+
+  const result = CreateAvailabilityWindowSchema.safeParse({
+    dayOfWeek,
+    startTime: String(startTime),
+    endTime: String(endTime),
+  });
   if (!result.success) {
     return { error: result.error.issues[0]?.message ?? "Invalid input" };
   }
@@ -47,6 +98,7 @@ export async function createAvailabilityWindowAction(
     if (error instanceof SchedulingError) {
       return { error: error.message };
     }
+    logger.error({ error, userId: user.id }, "availability_window.create_action_failed");
     return { error: "Failed to create availability window" };
   }
 }
@@ -64,43 +116,33 @@ export async function updateAvailabilityWindowAction(
     return { error: "Unauthorized" };
   }
 
-  const id = formData.get("id") as string;
-  const dayOfWeek = formData.get("dayOfWeek");
-  const startTime = formData.get("startTime");
-  const endTime = formData.get("endTime");
-
-  if (!id) {
+  const id = formData.get("id");
+  if (id === null || id === "") {
     return { error: "Missing window ID" };
   }
 
-  const input: {
-    dayOfWeek?: number;
-    startTime?: string;
-    endTime?: string;
-  } = {};
-  if (dayOfWeek !== null) {
-    input.dayOfWeek = Number(dayOfWeek);
-  }
-  if (startTime !== null) {
-    input.startTime = startTime as string;
-  }
-  if (endTime !== null) {
-    input.endTime = endTime as string;
+  const parseResult = parseOptionalUpdateFields(formData);
+  if ("error" in parseResult) {
+    return { error: parseResult.error };
   }
 
-  const result = UpdateAvailabilityWindowSchema.safeParse(input);
-  if (!result.success) {
-    return { error: result.error.issues[0]?.message ?? "Invalid input" };
+  const validationResult = UpdateAvailabilityWindowSchema.safeParse(parseResult.input);
+  if (!validationResult.success) {
+    return { error: validationResult.error.issues[0]?.message ?? "Invalid input" };
   }
 
   try {
-    await updateAvailabilityWindow(id, result.data, user.id);
+    await updateAvailabilityWindow(String(id), validationResult.data, user.id);
     revalidatePath("/dashboard/scheduling/availability");
     return { success: true };
   } catch (error) {
     if (error instanceof SchedulingError) {
       return { error: error.message };
     }
+    logger.error(
+      { error, windowId: id, userId: user.id },
+      "availability_window.update_action_failed",
+    );
     return { error: "Failed to update availability window" };
   }
 }
@@ -118,20 +160,24 @@ export async function deleteAvailabilityWindowAction(
     return { error: "Unauthorized" };
   }
 
-  const id = formData.get("id") as string;
+  const id = formData.get("id");
 
-  if (!id) {
+  if (id === null || id === "") {
     return { error: "Missing window ID" };
   }
 
   try {
-    await deleteAvailabilityWindow(id, user.id);
+    await deleteAvailabilityWindow(String(id), user.id);
     revalidatePath("/dashboard/scheduling/availability");
     return { success: true };
   } catch (error) {
     if (error instanceof SchedulingError) {
       return { error: error.message };
     }
+    logger.error(
+      { error, windowId: id, userId: user.id },
+      "availability_window.delete_action_failed",
+    );
     return { error: "Failed to delete availability window" };
   }
 }

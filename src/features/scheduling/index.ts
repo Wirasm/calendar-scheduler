@@ -13,6 +13,7 @@ export {
   EventTypeNotFoundError,
   EventTypeSlugExistsError,
   SchedulingAccessDeniedError,
+  SchedulingDatabaseError,
   SchedulingError,
 } from "./errors";
 
@@ -24,9 +25,9 @@ export type {
   AvailabilityWindow,
   EventType,
   NewAppointment,
-  NewAvailabilityWindow,
   NewEventType,
 } from "./models";
+// Note: NewAvailabilityWindow is intentionally not exported - use CreateAvailabilityWindowInput instead
 
 // ============================================================================
 // Schemas (for validation)

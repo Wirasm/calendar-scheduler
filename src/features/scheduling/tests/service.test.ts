@@ -88,6 +88,58 @@ describe("createAvailabilityWindow", () => {
     expect(result.startTime).toBe("18:00");
     expect(mockRepository.create).toHaveBeenCalledTimes(1);
   });
+
+  it("allows adjacent windows that share a boundary time", async () => {
+    // Existing: 09:00-17:00, New: 17:00-20:00 should be allowed (no overlap)
+    mockRepository.findByUserIdAndDay.mockResolvedValue([mockWindow]); // 09:00-17:00
+    const adjacentWindow = {
+      ...mockWindow,
+      id: "adjacent-id",
+      startTime: "17:00",
+      endTime: "20:00",
+    };
+    mockRepository.create.mockResolvedValue(adjacentWindow);
+
+    const result = await createAvailabilityWindow(
+      { dayOfWeek: 1, startTime: "17:00", endTime: "20:00" },
+      userId,
+    );
+
+    expect(result.startTime).toBe("17:00");
+    expect(mockRepository.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("detects overlap when new window starts at existing start time", async () => {
+    // Existing: 09:00-17:00, New: 09:00-10:00 overlaps
+    mockRepository.findByUserIdAndDay.mockResolvedValue([mockWindow]);
+
+    await expect(
+      createAvailabilityWindow({ dayOfWeek: 1, startTime: "09:00", endTime: "10:00" }, userId),
+    ).rejects.toThrow("overlaps");
+  });
+
+  it("detects overlap when new window ends at existing end time", async () => {
+    // Existing: 09:00-17:00, New: 16:00-17:00 overlaps
+    mockRepository.findByUserIdAndDay.mockResolvedValue([mockWindow]);
+
+    await expect(
+      createAvailabilityWindow({ dayOfWeek: 1, startTime: "16:00", endTime: "17:00" }, userId),
+    ).rejects.toThrow("overlaps");
+  });
+
+  it("verifies repository.create is called with correct arguments", async () => {
+    mockRepository.findByUserIdAndDay.mockResolvedValue([]);
+    mockRepository.create.mockResolvedValue(mockWindow);
+
+    await createAvailabilityWindow({ dayOfWeek: 1, startTime: "09:00", endTime: "17:00" }, userId);
+
+    expect(mockRepository.create).toHaveBeenCalledWith({
+      userId,
+      dayOfWeek: 1,
+      startTime: "09:00",
+      endTime: "17:00",
+    });
+  });
 });
 
 describe("getAvailabilityWindowsByUser", () => {
@@ -207,6 +259,46 @@ describe("updateAvailabilityWindow", () => {
     await expect(
       updateAvailabilityWindow(mockWindow.id, { startTime: "10:00" }, userId),
     ).rejects.toThrow("Availability window not found");
+  });
+
+  it("checks overlap on new day when dayOfWeek is changed", async () => {
+    // Moving Monday window to Tuesday where 09:00-17:00 already exists
+    const tuesdayWindow = {
+      ...mockWindow,
+      id: "tuesday-id",
+      dayOfWeek: 2,
+      startTime: "09:00",
+      endTime: "17:00",
+    };
+    mockRepository.findById.mockResolvedValue(mockWindow); // Monday 09:00-17:00
+    mockRepository.findByUserIdAndDay.mockResolvedValue([tuesdayWindow]); // Tuesday already has 09:00-17:00
+
+    await expect(
+      updateAvailabilityWindow(mockWindow.id, { dayOfWeek: 2 }, userId), // Move to Tuesday
+    ).rejects.toThrow("overlaps");
+  });
+
+  it("allows changing dayOfWeek when no overlap on new day", async () => {
+    const updatedWindow = { ...mockWindow, dayOfWeek: 2 };
+    mockRepository.findById.mockResolvedValue(mockWindow);
+    mockRepository.findByUserIdAndDay.mockResolvedValue([]); // Tuesday is empty
+    mockRepository.update.mockResolvedValue(updatedWindow);
+
+    const result = await updateAvailabilityWindow(mockWindow.id, { dayOfWeek: 2 }, userId);
+
+    expect(result.dayOfWeek).toBe(2);
+    expect(mockRepository.findByUserIdAndDay).toHaveBeenCalledWith(userId, 2);
+  });
+
+  it("uses existing values for overlap check when updating only startTime", async () => {
+    mockRepository.findById.mockResolvedValue(mockWindow); // dayOfWeek: 1, 09:00-17:00
+    mockRepository.findByUserIdAndDay.mockResolvedValue([mockWindow]);
+    mockRepository.update.mockResolvedValue({ ...mockWindow, startTime: "10:00" });
+
+    await updateAvailabilityWindow(mockWindow.id, { startTime: "10:00" }, userId);
+
+    // Should check overlap on day 1 (existing), not undefined
+    expect(mockRepository.findByUserIdAndDay).toHaveBeenCalledWith(userId, 1);
   });
 });
 
