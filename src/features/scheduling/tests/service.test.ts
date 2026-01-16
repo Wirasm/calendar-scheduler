@@ -634,7 +634,7 @@ describe("getAvailableSlots", () => {
         startDate,
         endDate,
       }),
-    ).rejects.toThrow("no availability windows configured");
+    ).rejects.toThrow("Consultant has no availability windows configured");
   });
 
   it("sorts slots by start time", async () => {
@@ -731,8 +731,17 @@ describe("getAvailableSlots", () => {
 describe("validateSlotAvailable", () => {
   beforeEach(() => {
     mockRepository.findEventTypeById.mockReset();
+    mockRepository.findAvailabilityWindowsByUser.mockReset();
     mockRepository.findAppointmentsByUserAndDateRange.mockReset();
     mockRepository.findAvailabilityWindowsByUser.mockReset();
+  });
+
+  // Helper to create a window for any day of week at 09:00-17:00
+  const createWindowForDay = (dayOfWeek: number): AvailabilityWindow => ({
+    ...mockMondayWindow,
+    dayOfWeek,
+    startTime: "09:00",
+    endTime: "17:00",
   });
 
   it("returns event type and end time for valid slot", async () => {
@@ -748,6 +757,10 @@ describe("validateSlotAvailable", () => {
       startTime.setUTCDate(startTime.getUTCDate() + 1);
     }
     startTime.setUTCHours(10, 0, 0, 0);
+
+    // Mock availability window for the day of the slot
+    const dayOfWeek = startTime.getUTCDay();
+    mockRepository.findAvailabilityWindowsByUser.mockResolvedValue([createWindowForDay(dayOfWeek)]);
 
     const result = await validateSlotAvailable(mockEventType.id, startTime);
 
@@ -769,6 +782,10 @@ describe("validateSlotAvailable", () => {
       startTime.setUTCDate(startTime.getUTCDate() + 1);
     }
     startTime.setUTCHours(10, 0, 0, 0);
+
+    // Mock availability window for the day of the slot
+    const dayOfWeek = startTime.getUTCDay();
+    mockRepository.findAvailabilityWindowsByUser.mockResolvedValue([createWindowForDay(dayOfWeek)]);
 
     const existingAppointment: Appointment = {
       id: "550e8400-e29b-41d4-a716-446655440020",
@@ -793,6 +810,23 @@ describe("validateSlotAvailable", () => {
 
     await expect(validateSlotAvailable(mockEventType.id, startTime)).rejects.toThrow(
       "Time slot is no longer available",
+    );
+  });
+
+  it("throws AppointmentOutsideAvailabilityError when slot is outside availability", async () => {
+    mockRepository.findEventTypeById.mockResolvedValue(mockEventType);
+    mockRepository.findAppointmentsByUserAndDateRange.mockResolvedValue([]);
+
+    const now = new Date();
+    const startTime = new Date(now);
+    startTime.setUTCDate(startTime.getUTCDate() + 2);
+    startTime.setUTCHours(3, 0, 0, 0); // 3 AM - outside normal availability
+
+    // Mock availability window for a different day or time
+    mockRepository.findAvailabilityWindowsByUser.mockResolvedValue([mockMondayWindow]); // Monday 9-12
+
+    await expect(validateSlotAvailable(mockEventType.id, startTime)).rejects.toThrow(
+      "outside available hours",
     );
   });
 

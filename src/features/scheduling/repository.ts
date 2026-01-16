@@ -110,6 +110,8 @@ export async function findAppointmentsByUserAndDateRange(
   endDate: Date,
   excludeCancelled?: boolean,
 ): Promise<Appointment[]> {
+  // Query for appointments that overlap with the date range
+  // An appointment overlaps if: appointmentStart < rangeEnd AND appointmentEnd > rangeStart
   const conditions = [
     eq(appointments.userId, userId),
     lte(appointments.startTime, endDate),

@@ -48,14 +48,19 @@ function checkOverlap(
 
 /**
  * Parse HH:MM time string to minutes since midnight.
+ * Throws if the time format is invalid (indicates data corruption).
  */
 function parseTimeToMinutes(time: string): number {
-  const parts = time.split(":");
-  const hours = Number(parts[0]);
-  const minutes = Number(parts[1]);
-  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
-    throw new Error(`Invalid time format: ${time}`);
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
+  const hoursStr = match?.[1];
+  const minutesStr = match?.[2];
+  if (!hoursStr || !minutesStr) {
+    throw new Error(
+      `Invalid time format in availability window: "${time}". Expected HH:MM format.`,
+    );
   }
+  const hours = parseInt(hoursStr, 10);
+  const minutes = parseInt(minutesStr, 10);
   return hours * 60 + minutes;
 }
 
@@ -336,7 +341,7 @@ export async function getAvailableSlots(input: GetAvailableSlotsInput): Promise<
   // 3. Get availability windows
   const windows = await repository.findAvailabilityWindowsByUser(eventType.userId);
   if (windows.length === 0) {
-    logger.info({ userId: eventType.userId }, "slots.no_availability");
+    logger.warn({ userId: eventType.userId }, "slots.no_availability_configured");
     throw new NoAvailabilityConfiguredError(eventType.userId);
   }
 
@@ -433,8 +438,8 @@ export async function validateSlotAvailable(
 
   if (startTime < minBookingTime) {
     logger.warn(
-      { eventTypeId, startTime, minNoticeHours: eventType.minNoticeHours },
-      "slot.validate_insufficient_notice",
+      { eventTypeId, startTime, minBookingTime, minNoticeHours: eventType.minNoticeHours },
+      "slot.insufficient_notice",
     );
     throw new AppointmentInsufficientNoticeError(eventType.minNoticeHours);
   }
@@ -444,8 +449,8 @@ export async function validateSlotAvailable(
 
   if (startTime > maxBookingTime) {
     logger.warn(
-      { eventTypeId, startTime, maxAdvanceDays: eventType.maxAdvanceDays },
-      "slot.validate_too_far_advance",
+      { eventTypeId, startTime, maxBookingTime, maxAdvanceDays: eventType.maxAdvanceDays },
+      "slot.too_far_advance",
     );
     throw new AppointmentTooFarAdvanceError(eventType.maxAdvanceDays);
   }
@@ -453,7 +458,7 @@ export async function validateSlotAvailable(
   // Check if slot is within availability windows
   const windows = await repository.findAvailabilityWindowsByUser(eventType.userId);
   if (!slotWithinAvailability({ startTime, endTime }, windows)) {
-    logger.warn({ eventTypeId, startTime }, "slot.validate_outside_availability");
+    logger.warn({ eventTypeId, startTime }, "slot.outside_availability");
     throw new AppointmentOutsideAvailabilityError(startTime);
   }
 
@@ -474,7 +479,10 @@ export async function validateSlotAvailable(
 
   for (const apt of conflictingAppointments) {
     if (rangesOverlap(expandedStart, expandedEnd, apt.startTime, apt.endTime)) {
-      logger.warn({ eventTypeId, startTime, conflictingAptId: apt.id }, "slot.validate_conflict");
+      logger.warn(
+        { eventTypeId, startTime, conflictingAppointmentId: apt.id },
+        "slot.conflict_with_appointment",
+      );
       throw new AppointmentSlotUnavailableError(startTime);
     }
   }
