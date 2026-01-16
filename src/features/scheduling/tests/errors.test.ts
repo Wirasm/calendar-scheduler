@@ -79,6 +79,16 @@ describe("AvailabilityWindowOverlapError", () => {
     const error = new AvailabilityWindowOverlapError(6);
     expect(error.message).toContain("Saturday");
   });
+
+  it("handles out-of-range day index gracefully (7)", () => {
+    const error = new AvailabilityWindowOverlapError(7);
+    expect(error.message).toContain("Day 7");
+  });
+
+  it("handles negative day index gracefully (-1)", () => {
+    const error = new AvailabilityWindowOverlapError(-1);
+    expect(error.message).toContain("Day -1");
+  });
 });
 
 describe("AppointmentNotFoundError", () => {

@@ -6,8 +6,13 @@ import {
   text,
   time,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
+
+/** Valid appointment statuses. */
+export const APPOINTMENT_STATUSES = ["confirmed", "cancelled"] as const;
+export type AppointmentStatus = (typeof APPOINTMENT_STATUSES)[number];
 
 /**
  * Base timestamp columns for all tables.
@@ -66,26 +71,30 @@ export const projects = pgTable("projects", {
 /**
  * Event types - defines bookable meeting types (e.g., "30 min consultation")
  */
-export const eventTypes = pgTable("event_types", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  slug: text("slug").notNull(),
-  description: text("description"),
-  durationMinutes: integer("duration_minutes").notNull().default(30),
-  bufferBeforeMinutes: integer("buffer_before_minutes").notNull().default(0),
-  bufferAfterMinutes: integer("buffer_after_minutes").notNull().default(15),
-  minNoticeHours: integer("min_notice_hours").notNull().default(24),
-  maxAdvanceDays: integer("max_advance_days").notNull().default(14),
-  isActive: boolean("is_active").notNull().default(true),
-  ...timestamps,
-});
+export const eventTypes = pgTable(
+  "event_types",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description"),
+    durationMinutes: integer("duration_minutes").notNull().default(30),
+    bufferBeforeMinutes: integer("buffer_before_minutes").notNull().default(0),
+    bufferAfterMinutes: integer("buffer_after_minutes").notNull().default(15),
+    minNoticeHours: integer("min_notice_hours").notNull().default(24),
+    maxAdvanceDays: integer("max_advance_days").notNull().default(14),
+    isActive: boolean("is_active").notNull().default(true),
+    ...timestamps,
+  },
+  (table) => [unique("event_types_user_slug_unique").on(table.userId, table.slug)],
+);
 
 /**
  * Availability windows - recurring weekly time blocks when user is available
- * dayOfWeek: 0 = Sunday, 1 = Monday, ..., 6 = Saturday (ISO standard)
+ * dayOfWeek: 0 = Sunday, 1 = Monday, ..., 6 = Saturday (JavaScript Date.getDay() convention)
  */
 export const availabilityWindows = pgTable("availability_windows", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -100,6 +109,9 @@ export const availabilityWindows = pgTable("availability_windows", {
 
 /**
  * Appointments - booked meetings between consultant and attendee
+ *
+ * userId: The consultant/owner who is being booked (not the attendee).
+ *         Attendee info is stored in attendeeName/attendeeEmail fields.
  */
 export const appointments = pgTable("appointments", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -114,7 +126,7 @@ export const appointments = pgTable("appointments", {
   attendeeName: text("attendee_name").notNull(),
   attendeeEmail: text("attendee_email").notNull(),
   attendeeMessage: text("attendee_message"),
-  status: text("status").notNull().default("confirmed"), // confirmed, cancelled
+  status: text("status").notNull().default("confirmed").$type<AppointmentStatus>(),
   cancelledAt: timestamp("cancelled_at"),
   reminderSentAt: timestamp("reminder_sent_at"),
   ...timestamps,

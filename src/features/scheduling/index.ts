@@ -56,6 +56,6 @@ export {
 } from "./schemas";
 
 // ============================================================================
-// Service functions (to be added in Phase 2/3)
+// Service functions
 // ============================================================================
-// export { ... } from "./service";
+// TODO: Add service exports once repository and business logic are implemented

@@ -41,25 +41,43 @@ export type UpdateEventTypeInput = z.infer<typeof UpdateEventTypeSchema>;
 // Availability Window Schemas
 // ============================================================================
 
-export const CreateAvailabilityWindowSchema = z.object({
-  dayOfWeek: z.number().int().min(0).max(6), // 0 = Sunday, 6 = Saturday
-  startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)"),
-  endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)"),
-});
+export const CreateAvailabilityWindowSchema = z
+  .object({
+    dayOfWeek: z.number().int().min(0).max(6), // 0 = Sunday, 6 = Saturday
+    startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)"),
+    endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)"),
+  })
+  .refine((data) => data.startTime < data.endTime, {
+    message: "Start time must be before end time",
+    path: ["endTime"],
+  });
 
 export type CreateAvailabilityWindowInput = z.infer<typeof CreateAvailabilityWindowSchema>;
 
-export const UpdateAvailabilityWindowSchema = z.object({
-  dayOfWeek: z.number().int().min(0).max(6).optional(),
-  startTime: z
-    .string()
-    .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)")
-    .optional(),
-  endTime: z
-    .string()
-    .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)")
-    .optional(),
-});
+export const UpdateAvailabilityWindowSchema = z
+  .object({
+    dayOfWeek: z.number().int().min(0).max(6).optional(),
+    startTime: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)")
+      .optional(),
+    endTime: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)")
+      .optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.startTime !== undefined && data.endTime !== undefined) {
+        return data.startTime < data.endTime;
+      }
+      return true;
+    },
+    {
+      message: "Start time must be before end time",
+      path: ["endTime"],
+    },
+  );
 
 export type UpdateAvailabilityWindowInput = z.infer<typeof UpdateAvailabilityWindowSchema>;
 
@@ -129,7 +147,7 @@ export const AppointmentResponseSchema = z.object({
   attendeeName: z.string(),
   attendeeEmail: z.string(),
   attendeeMessage: z.string().nullable(),
-  status: z.string(),
+  status: z.enum(["confirmed", "cancelled"]),
   cancelledAt: z.date().nullable(),
   reminderSentAt: z.date().nullable(),
   createdAt: z.date(),

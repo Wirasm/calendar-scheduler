@@ -1,0 +1,1 @@
+ALTER TABLE "event_types" ADD CONSTRAINT "event_types_user_slug_unique" UNIQUE("user_id","slug");
