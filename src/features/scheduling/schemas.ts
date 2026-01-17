@@ -155,3 +155,27 @@ export const AppointmentResponseSchema = z.object({
 });
 
 export type AppointmentResponse = z.infer<typeof AppointmentResponseSchema>;
+
+// ============================================================================
+// Slot Generation Schemas
+// ============================================================================
+
+export const GetAvailableSlotsSchema = z
+  .object({
+    eventTypeId: z.string().uuid(),
+    startDate: z.coerce.date(),
+    endDate: z.coerce.date(),
+  })
+  .refine((data) => data.startDate < data.endDate, {
+    message: "Start date must be before end date",
+    path: ["endDate"],
+  });
+
+export type GetAvailableSlotsInput = z.infer<typeof GetAvailableSlotsSchema>;
+
+export const TimeSlotSchema = z.object({
+  startTime: z.date(),
+  endTime: z.date(),
+});
+
+export type TimeSlot = z.infer<typeof TimeSlotSchema>;
