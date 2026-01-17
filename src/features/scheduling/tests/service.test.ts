@@ -43,6 +43,9 @@ const mockRepository = {
   findActiveEventTypesByUser: mock<(userId: string) => Promise<EventType[]>>(() =>
     Promise.resolve([]),
   ),
+  createAppointment: mock<(data: Appointment) => Promise<Appointment>>(() =>
+    Promise.resolve({} as Appointment),
+  ),
 };
 
 // Mock the repository before importing service
@@ -50,6 +53,7 @@ mock.module("../repository", () => mockRepository);
 
 // Import service after mocking
 const {
+  createAppointment,
   createAvailabilityWindow,
   deleteAvailabilityWindow,
   getAvailabilityWindow,
@@ -886,6 +890,192 @@ describe("validateSlotAvailable", () => {
 
     await expect(validateSlotAvailable(mockEventType.id, startTime)).rejects.toThrow(
       "outside of available hours",
+    );
+  });
+});
+
+// ============================================================================
+// Appointment Creation Tests
+// ============================================================================
+
+describe("createAppointment", () => {
+  // Helper to create a window for any day of week at 09:00-17:00
+  const createWindowForDay = (dayOfWeek: number): AvailabilityWindow => ({
+    ...mockMondayWindow,
+    dayOfWeek,
+    startTime: "09:00",
+    endTime: "17:00",
+  });
+
+  beforeEach(() => {
+    mockRepository.findEventTypeById.mockReset();
+    mockRepository.findAvailabilityWindowsByUser.mockReset();
+    mockRepository.findAppointmentsByUserAndDateRange.mockReset();
+    mockRepository.createAppointment.mockReset();
+  });
+
+  it("creates appointment for valid slot", async () => {
+    mockRepository.findEventTypeById.mockResolvedValue(mockEventType);
+    mockRepository.findAppointmentsByUserAndDateRange.mockResolvedValue([]);
+
+    const now = new Date();
+    const startTime = new Date(now);
+    startTime.setUTCDate(startTime.getUTCDate() + 2);
+    // Find next Monday
+    while (startTime.getUTCDay() !== 1) {
+      startTime.setUTCDate(startTime.getUTCDate() + 1);
+    }
+    startTime.setUTCHours(10, 0, 0, 0);
+
+    const dayOfWeek = startTime.getUTCDay();
+    mockRepository.findAvailabilityWindowsByUser.mockResolvedValue([createWindowForDay(dayOfWeek)]);
+
+    const expectedEndTime = new Date(startTime);
+    expectedEndTime.setUTCMinutes(expectedEndTime.getUTCMinutes() + mockEventType.durationMinutes);
+
+    const mockAppointment: Appointment = {
+      id: "550e8400-e29b-41d4-a716-446655440030",
+      eventTypeId: mockEventType.id,
+      userId: mockEventType.userId,
+      startTime,
+      endTime: expectedEndTime,
+      attendeeName: "John Doe",
+      attendeeEmail: "john@example.com",
+      attendeeMessage: "Looking forward to meeting",
+      status: "confirmed",
+      cancelledAt: null,
+      reminderSentAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    mockRepository.createAppointment.mockResolvedValue(mockAppointment);
+
+    const result = await createAppointment({
+      eventTypeId: mockEventType.id,
+      startTime,
+      attendeeName: "John Doe",
+      attendeeEmail: "john@example.com",
+      attendeeMessage: "Looking forward to meeting",
+    });
+
+    expect(result.id).toBe(mockAppointment.id);
+    expect(result.attendeeName).toBe("John Doe");
+    expect(result.attendeeEmail).toBe("john@example.com");
+    expect(mockRepository.createAppointment).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws AppointmentSlotUnavailableError when slot is taken", async () => {
+    mockRepository.findEventTypeById.mockResolvedValue(mockEventType);
+    mockRepository.findAvailabilityWindowsByUser.mockResolvedValue([mockMondayWindow]);
+
+    const now = new Date();
+    const startTime = new Date(now);
+    startTime.setUTCDate(startTime.getUTCDate() + 2);
+    // Find next Monday
+    while (startTime.getUTCDay() !== 1) {
+      startTime.setUTCDate(startTime.getUTCDate() + 1);
+    }
+    startTime.setUTCHours(10, 0, 0, 0);
+
+    const dayOfWeek = startTime.getUTCDay();
+    mockRepository.findAvailabilityWindowsByUser.mockResolvedValue([createWindowForDay(dayOfWeek)]);
+
+    const existingAppointment: Appointment = {
+      id: "550e8400-e29b-41d4-a716-446655440020",
+      eventTypeId: mockEventType.id,
+      userId: mockEventType.userId,
+      startTime: new Date(startTime),
+      endTime: new Date(startTime),
+      attendeeName: "Existing User",
+      attendeeEmail: "existing@example.com",
+      attendeeMessage: null,
+      status: "confirmed",
+      cancelledAt: null,
+      reminderSentAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    existingAppointment.endTime.setUTCMinutes(
+      existingAppointment.endTime.getUTCMinutes() + mockEventType.durationMinutes,
+    );
+
+    mockRepository.findAppointmentsByUserAndDateRange.mockResolvedValue([existingAppointment]);
+
+    await expect(
+      createAppointment({
+        eventTypeId: mockEventType.id,
+        startTime,
+        attendeeName: "John Doe",
+        attendeeEmail: "john@example.com",
+      }),
+    ).rejects.toThrow("Time slot is no longer available");
+  });
+
+  it("throws EventTypeNotFoundError for invalid event type", async () => {
+    mockRepository.findEventTypeById.mockResolvedValue(undefined);
+
+    const now = new Date();
+    const startTime = new Date(now);
+    startTime.setUTCDate(startTime.getUTCDate() + 2);
+
+    await expect(
+      createAppointment({
+        eventTypeId: "non-existent",
+        startTime,
+        attendeeName: "John Doe",
+        attendeeEmail: "john@example.com",
+      }),
+    ).rejects.toThrow("Event type not found");
+  });
+
+  it("creates appointment with null message when not provided", async () => {
+    mockRepository.findEventTypeById.mockResolvedValue(mockEventType);
+    mockRepository.findAppointmentsByUserAndDateRange.mockResolvedValue([]);
+
+    const now = new Date();
+    const startTime = new Date(now);
+    startTime.setUTCDate(startTime.getUTCDate() + 2);
+    while (startTime.getUTCDay() !== 1) {
+      startTime.setUTCDate(startTime.getUTCDate() + 1);
+    }
+    startTime.setUTCHours(10, 0, 0, 0);
+
+    const dayOfWeek = startTime.getUTCDay();
+    mockRepository.findAvailabilityWindowsByUser.mockResolvedValue([createWindowForDay(dayOfWeek)]);
+
+    const expectedEndTime = new Date(startTime);
+    expectedEndTime.setUTCMinutes(expectedEndTime.getUTCMinutes() + mockEventType.durationMinutes);
+
+    const mockAppointment: Appointment = {
+      id: "550e8400-e29b-41d4-a716-446655440031",
+      eventTypeId: mockEventType.id,
+      userId: mockEventType.userId,
+      startTime,
+      endTime: expectedEndTime,
+      attendeeName: "John Doe",
+      attendeeEmail: "john@example.com",
+      attendeeMessage: null,
+      status: "confirmed",
+      cancelledAt: null,
+      reminderSentAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    mockRepository.createAppointment.mockResolvedValue(mockAppointment);
+
+    await createAppointment({
+      eventTypeId: mockEventType.id,
+      startTime,
+      attendeeName: "John Doe",
+      attendeeEmail: "john@example.com",
+    });
+
+    expect(mockRepository.createAppointment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attendeeMessage: null,
+      }),
     );
   });
 });

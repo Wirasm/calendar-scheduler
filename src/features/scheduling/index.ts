@@ -65,6 +65,7 @@ export {
 // Service functions
 // ============================================================================
 export {
+  createAppointment,
   createAvailabilityWindow,
   deleteAvailabilityWindow,
   getAvailabilityWindow,

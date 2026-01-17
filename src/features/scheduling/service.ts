@@ -14,6 +14,7 @@ import {
 import type { Appointment, AvailabilityWindow, EventType } from "./models";
 import * as repository from "./repository";
 import type {
+  CreateAppointmentInput,
   CreateAvailabilityWindowInput,
   GetAvailableSlotsInput,
   TimeSlot,
@@ -489,4 +490,37 @@ export async function validateSlotAvailable(
 
   logger.info({ eventTypeId, startTime }, "slot.validate_completed");
   return { eventType, endTime };
+}
+
+// ============================================================================
+// Appointment Service
+// ============================================================================
+
+/**
+ * Create a new appointment.
+ * Validates that the slot is still available before creating to prevent race conditions.
+ */
+export async function createAppointment(input: CreateAppointmentInput): Promise<Appointment> {
+  logger.info(
+    { eventTypeId: input.eventTypeId, startTime: input.startTime },
+    "appointment.create_started",
+  );
+
+  // Validate slot is still available (race condition protection)
+  const { eventType, endTime } = await validateSlotAvailable(input.eventTypeId, input.startTime);
+
+  // Create the appointment
+  const appointment = await repository.createAppointment({
+    eventTypeId: input.eventTypeId,
+    userId: eventType.userId,
+    startTime: input.startTime,
+    endTime,
+    attendeeName: input.attendeeName,
+    attendeeEmail: input.attendeeEmail,
+    attendeeMessage: input.attendeeMessage ?? null,
+    status: "confirmed",
+  });
+
+  logger.info({ appointmentId: appointment.id }, "appointment.create_completed");
+  return appointment;
 }
