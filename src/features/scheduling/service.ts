@@ -415,8 +415,9 @@ export async function getAvailableSlots(input: GetAvailableSlotsInput): Promise<
 }
 
 /**
- * Validate that a specific slot is still available for booking.
- * Used when actually creating an appointment to prevent race conditions.
+ * Validate that a specific slot is available for booking.
+ * Checks: event type exists, minimum notice hours, maximum advance days,
+ * slot falls within availability windows, and no conflicting appointments.
  */
 export async function validateSlotAvailable(
   eventTypeId: string,
@@ -497,8 +498,9 @@ export async function validateSlotAvailable(
 // ============================================================================
 
 /**
- * Create a new appointment.
- * Validates that the slot is still available before creating to prevent race conditions.
+ * Create a new appointment after validating slot availability.
+ * Note: For high-concurrency scenarios, consider adding database-level
+ * unique constraints to prevent double-booking.
  */
 export async function createAppointment(input: CreateAppointmentInput): Promise<Appointment> {
   logger.info(
@@ -506,7 +508,7 @@ export async function createAppointment(input: CreateAppointmentInput): Promise<
     "appointment.create_started",
   );
 
-  // Validate slot is still available (race condition protection)
+  // Validate slot is available before creating
   const { eventType, endTime } = await validateSlotAvailable(input.eventTypeId, input.startTime);
 
   // Create the appointment
@@ -523,4 +525,51 @@ export async function createAppointment(input: CreateAppointmentInput): Promise<
 
   logger.info({ appointmentId: appointment.id }, "appointment.create_completed");
   return appointment;
+}
+
+// ============================================================================
+// Data Retrieval Service (for email sending and other cross-feature needs)
+// ============================================================================
+
+export interface BookingEmailData {
+  eventType: EventType;
+  consultant: {
+    id: string;
+    email: string;
+    displayName: string | null;
+  };
+}
+
+/**
+ * Get data needed for booking confirmation emails.
+ * Returns undefined if event type or consultant is not found (indicates data integrity issue).
+ */
+export async function getBookingEmailData(
+  eventTypeId: string,
+  userId: string,
+): Promise<BookingEmailData | undefined> {
+  const eventType = await repository.findEventTypeById(eventTypeId);
+  const user = await repository.findUserById(userId);
+
+  if (!eventType || !user) {
+    logger.error(
+      {
+        eventTypeId,
+        userId,
+        eventTypeFound: !!eventType,
+        userFound: !!user,
+      },
+      "booking.email_data_missing",
+    );
+    return undefined;
+  }
+
+  return {
+    eventType,
+    consultant: {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+    },
+  };
 }

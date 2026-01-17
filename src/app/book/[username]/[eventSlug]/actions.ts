@@ -9,17 +9,20 @@ import {
   CreateAppointmentSchema,
   createAppointment,
   getAvailableSlots,
+  getBookingEmailData,
   SchedulingError,
 } from "@/features/scheduling";
-import * as repository from "@/features/scheduling/repository";
 
 const logger = getLogger("booking.actions");
 
-export interface BookingActionState {
-  error?: string;
-  success?: boolean;
-  appointmentId?: string;
-}
+// ============================================================================
+// Types
+// ============================================================================
+
+export type BookingActionState =
+  | { status: "idle" }
+  | { status: "success"; appointmentId: string; emailSent: boolean; emailWarning?: string }
+  | { status: "error"; error: string };
 
 interface ParsedFormData {
   eventTypeId: string;
@@ -30,6 +33,14 @@ interface ParsedFormData {
 }
 
 type ParseResult = { ok: true; data: ParsedFormData } | { ok: false; error: string };
+
+export type SlotsResult =
+  | { ok: true; slots: Array<{ startTime: string; endTime: string }> }
+  | { ok: false; error: string };
+
+// ============================================================================
+// Helpers
+// ============================================================================
 
 function parseFormData(formData: FormData): ParseResult {
   const eventTypeId = formData.get("eventTypeId");
@@ -63,34 +74,55 @@ function parseFormData(formData: FormData): ParseResult {
   };
 }
 
+interface EmailResult {
+  sent: boolean;
+  warning?: string;
+}
+
 async function sendConfirmationEmail(
   appointment: Awaited<ReturnType<typeof createAppointment>>,
-): Promise<void> {
-  const eventType = await repository.findEventTypeById(appointment.eventTypeId);
-  const consultant = await repository.findUserById(appointment.userId);
+): Promise<EmailResult> {
+  const emailData = await getBookingEmailData(appointment.eventTypeId, appointment.userId);
 
-  if (!eventType || !consultant) {
-    return;
+  if (!emailData) {
+    // Already logged by getBookingEmailData
+    return {
+      sent: false,
+      warning:
+        "Confirmation email could not be sent. Your booking is confirmed - please save these details.",
+    };
   }
 
-  const emailData: BookingConfirmationEmailData = {
+  const confirmationData: BookingConfirmationEmailData = {
     appointmentId: appointment.id,
-    eventTypeName: eventType.name,
+    eventTypeName: emailData.eventType.name,
     startTime: appointment.startTime,
     endTime: appointment.endTime,
     attendeeName: appointment.attendeeName,
     attendeeEmail: appointment.attendeeEmail,
     attendeeMessage: appointment.attendeeMessage,
-    consultantName: consultant.displayName ?? consultant.email,
-    consultantEmail: consultant.email,
+    consultantName: emailData.consultant.displayName ?? emailData.consultant.email,
+    consultantEmail: emailData.consultant.email,
   };
 
   try {
-    await sendBookingConfirmation(emailData);
+    await sendBookingConfirmation(confirmationData);
+    return { sent: true };
   } catch (emailError) {
     logger.error({ appointmentId: appointment.id, error: emailError }, "booking.email_failed");
+    return {
+      sent: false,
+      warning:
+        "Confirmation email could not be sent. Your booking is confirmed - please save these details.",
+    };
   }
 }
+
+// ============================================================================
+// Actions
+// ============================================================================
+
+export const initialBookingState: BookingActionState = { status: "idle" };
 
 export async function createBookingAction(
   _prevState: BookingActionState,
@@ -98,7 +130,8 @@ export async function createBookingAction(
 ): Promise<BookingActionState> {
   const parsed = parseFormData(formData);
   if (!parsed.ok) {
-    return { error: parsed.error };
+    logger.debug({ error: parsed.error }, "booking.form_validation_failed");
+    return { status: "error", error: parsed.error };
   }
 
   const result = CreateAppointmentSchema.safeParse({
@@ -110,25 +143,40 @@ export async function createBookingAction(
   });
 
   if (!result.success) {
-    return { error: result.error.issues[0]?.message ?? "Invalid input" };
+    const errorMessage = result.error.issues[0]?.message ?? "Invalid input";
+    logger.debug({ issues: result.error.issues }, "booking.schema_validation_failed");
+    return { status: "error", error: errorMessage };
   }
 
   try {
     const appointment = await createAppointment(result.data);
-    await sendConfirmationEmail(appointment);
-    return { success: true, appointmentId: appointment.id };
+    const emailResult = await sendConfirmationEmail(appointment);
+
+    const successState: BookingActionState = {
+      status: "success",
+      appointmentId: appointment.id,
+      emailSent: emailResult.sent,
+    };
+    if (emailResult.warning) {
+      successState.emailWarning = emailResult.warning;
+    }
+    return successState;
   } catch (error) {
     if (error instanceof SchedulingError) {
-      return { error: error.message };
+      return { status: "error", error: error.message };
     }
-    logger.error({ error }, "booking.create_failed");
-    return { error: "Failed to create booking. Please try again." };
-  }
-}
 
-interface SlotsResult {
-  slots: Array<{ startTime: string; endTime: string }>;
-  error?: string;
+    logger.error(
+      {
+        error,
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        eventTypeId: result.data.eventTypeId,
+        startTime: result.data.startTime,
+      },
+      "booking.create_failed",
+    );
+    return { status: "error", error: "Failed to create booking. Please try again." };
+  }
 }
 
 export async function getAvailableSlotsAction(eventTypeId: string): Promise<SlotsResult> {
@@ -144,8 +192,8 @@ export async function getAvailableSlotsAction(eventTypeId: string): Promise<Slot
       endDate,
     });
 
-    // Serialize dates for client transport
     return {
+      ok: true,
       slots: slots.map((slot) => ({
         startTime: slot.startTime.toISOString(),
         endTime: slot.endTime.toISOString(),
@@ -153,9 +201,17 @@ export async function getAvailableSlotsAction(eventTypeId: string): Promise<Slot
     };
   } catch (error) {
     if (error instanceof SchedulingError) {
-      return { slots: [], error: error.message };
+      return { ok: false, error: error.message };
     }
-    logger.error({ eventTypeId, error }, "slots.fetch_failed");
-    return { slots: [], error: "Failed to load available slots" };
+
+    logger.error(
+      {
+        eventTypeId,
+        error,
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+      },
+      "slots.fetch_failed",
+    );
+    return { ok: false, error: "Failed to load available slots" };
   }
 }

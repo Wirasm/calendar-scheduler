@@ -46,6 +46,19 @@ const mockRepository = {
   createAppointment: mock<(data: Appointment) => Promise<Appointment>>(() =>
     Promise.resolve({} as Appointment),
   ),
+  findUserById: mock<
+    (id: string) => Promise<
+      | {
+          id: string;
+          email: string;
+          displayName: string | null;
+          avatarUrl: string | null;
+          createdAt: Date;
+          updatedAt: Date;
+        }
+      | undefined
+    >
+  >(() => Promise.resolve(undefined)),
 };
 
 // Mock the repository before importing service
@@ -59,6 +72,7 @@ const {
   getAvailabilityWindow,
   getAvailabilityWindowsByUser,
   getAvailableSlots,
+  getBookingEmailData,
   updateAvailabilityWindow,
   validateSlotAvailable,
 } = await import("../service");
@@ -1077,5 +1091,83 @@ describe("createAppointment", () => {
         attendeeMessage: null,
       }),
     );
+  });
+
+  it("throws AppointmentInsufficientNoticeError when slot is in the past", async () => {
+    mockRepository.findEventTypeById.mockResolvedValue(mockEventType);
+
+    // Create a time in the past
+    const now = new Date();
+    const startTime = new Date(now);
+    startTime.setUTCHours(startTime.getUTCHours() - 1); // 1 hour ago
+
+    await expect(
+      createAppointment({
+        eventTypeId: mockEventType.id,
+        startTime,
+        attendeeName: "John Doe",
+        attendeeEmail: "john@example.com",
+      }),
+    ).rejects.toThrow("require at least");
+  });
+});
+
+// ============================================================================
+// Booking Email Data Tests
+// ============================================================================
+
+describe("getBookingEmailData", () => {
+  const mockUser = {
+    id: userId,
+    email: "consultant@example.com",
+    displayName: "Dr. Consultant",
+    avatarUrl: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  beforeEach(() => {
+    mockRepository.findEventTypeById.mockReset();
+    mockRepository.findUserById.mockReset();
+  });
+
+  it("returns email data when both event type and user exist", async () => {
+    mockRepository.findEventTypeById.mockResolvedValue(mockEventType);
+    mockRepository.findUserById.mockResolvedValue(mockUser);
+
+    const result = await getBookingEmailData(mockEventType.id, userId);
+
+    expect(result).toBeDefined();
+    expect(result?.eventType).toEqual(mockEventType);
+    expect(result?.consultant.id).toBe(userId);
+    expect(result?.consultant.email).toBe("consultant@example.com");
+    expect(result?.consultant.displayName).toBe("Dr. Consultant");
+  });
+
+  it("returns undefined when event type not found", async () => {
+    mockRepository.findEventTypeById.mockResolvedValue(undefined);
+    mockRepository.findUserById.mockResolvedValue(mockUser);
+
+    const result = await getBookingEmailData("non-existent", userId);
+
+    expect(result).toBeUndefined();
+  });
+
+  it("returns undefined when user not found", async () => {
+    mockRepository.findEventTypeById.mockResolvedValue(mockEventType);
+    mockRepository.findUserById.mockResolvedValue(undefined);
+
+    const result = await getBookingEmailData(mockEventType.id, "non-existent");
+
+    expect(result).toBeUndefined();
+  });
+
+  it("returns undefined when both event type and user not found", async () => {
+    mockRepository.findEventTypeById.mockResolvedValue(undefined);
+    mockRepository.findUserById.mockResolvedValue(undefined);
+
+    const result = await getBookingEmailData("non-existent", "non-existent");
+
+    expect(result).toBeUndefined();
   });
 });

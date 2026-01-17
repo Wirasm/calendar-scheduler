@@ -4,17 +4,11 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { EventType, TimeSlot } from "@/features/scheduling";
+import type { EventType, TimeSlot, User } from "@/features/scheduling";
+import { formatDateShort, formatTime } from "@/shared";
 
 import { getAvailableSlotsAction } from "./actions";
 import { BookingForm } from "./booking-form";
-
-interface User {
-  id: string;
-  email: string;
-  displayName: string | null;
-  avatarUrl: string | null;
-}
 
 interface BookingPageClientProps {
   eventType: EventType;
@@ -55,22 +49,6 @@ function groupSlotsByDay(slots: TimeSlot[]): DaySlots[] {
   return result.sort((a, b) => a.date.getTime() - b.date.getTime());
 }
 
-function formatDate(date: Date): string {
-  return date.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
 export function BookingPageClient({ eventType, consultant }: BookingPageClientProps) {
   const [slots, setSlots] = useState<TimeSlot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,10 +61,9 @@ export function BookingPageClient({ eventType, consultant }: BookingPageClientPr
       setLoading(true);
       setError(null);
       const result = await getAvailableSlotsAction(eventType.id);
-      if (result.error) {
+      if (!result.ok) {
         setError(result.error);
       } else {
-        // Convert Date strings back to Date objects
         const parsedSlots = result.slots.map((slot) => ({
           startTime: new Date(slot.startTime),
           endTime: new Date(slot.endTime),
@@ -95,7 +72,10 @@ export function BookingPageClient({ eventType, consultant }: BookingPageClientPr
       }
       setLoading(false);
     }
-    void loadSlots();
+    void loadSlots().catch(() => {
+      setError("Failed to load available times. Please refresh the page.");
+      setLoading(false);
+    });
   }, [eventType.id]);
 
   const daySlots = groupSlotsByDay(slots);
@@ -180,7 +160,7 @@ export function BookingPageClient({ eventType, consultant }: BookingPageClientPr
                     setSelectedSlot(null);
                   }}
                 >
-                  {formatDate(day.date)}
+                  {formatDateShort(day.date)}
                 </Button>
               ))}
             </div>

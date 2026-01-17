@@ -8,8 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { formatDateFull, formatTime } from "@/shared";
 
-import { type BookingActionState, createBookingAction } from "./actions";
+import { createBookingAction, initialBookingState } from "./actions";
 
 interface BookingFormProps {
   eventTypeId: string;
@@ -18,25 +19,6 @@ interface BookingFormProps {
   eventTypeName: string;
   durationMinutes: number;
   onCancel: () => void;
-}
-
-const initialState: BookingActionState = {};
-
-function formatDateTime(date: Date): string {
-  return date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
 }
 
 export function BookingForm({
@@ -48,13 +30,17 @@ export function BookingForm({
   onCancel,
 }: BookingFormProps) {
   const router = useRouter();
-  const [state, formAction, isPending] = useActionState(createBookingAction, initialState);
+  const [state, formAction, isPending] = useActionState(createBookingAction, initialBookingState);
 
   useEffect(() => {
-    if (state.success && state.appointmentId) {
-      router.push(`/book/confirmation?id=${state.appointmentId}`);
+    if (state.status === "success") {
+      const params = new URLSearchParams({ id: state.appointmentId });
+      if (!state.emailSent) {
+        params.set("emailWarning", "true");
+      }
+      router.push(`/book/confirmation?${params.toString()}`);
     }
-  }, [state.success, state.appointmentId, router]);
+  }, [state, router]);
 
   return (
     <Card>
@@ -66,7 +52,7 @@ export function BookingForm({
       </CardHeader>
       <CardContent>
         <div className="mb-6 rounded-lg bg-muted p-4">
-          <p className="font-medium">{formatDateTime(selectedSlot.startTime)}</p>
+          <p className="font-medium">{formatDateFull(selectedSlot.startTime)}</p>
           <p className="text-sm text-muted-foreground">
             {formatTime(selectedSlot.startTime)} - {formatTime(selectedSlot.endTime)}
           </p>
@@ -76,7 +62,7 @@ export function BookingForm({
           <input type="hidden" name="eventTypeId" value={eventTypeId} />
           <input type="hidden" name="startTime" value={selectedSlot.startTime.toISOString()} />
 
-          {state.error && (
+          {state.status === "error" && (
             <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
               {state.error}
             </div>

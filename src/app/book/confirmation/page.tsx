@@ -3,48 +3,62 @@ import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/core/database/client";
 import { appointments, eventTypes, users } from "@/core/database/schema";
+import { getLogger } from "@/core/logging";
+import type { Appointment, EventType, User } from "@/features/scheduling";
+import { formatDateFull, formatTime } from "@/shared";
+
+const logger = getLogger("booking.confirmation");
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface PageProps {
-  searchParams: Promise<{ id?: string }>;
-}
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+  searchParams: Promise<{ id?: string; emailWarning?: string }>;
 }
 
 export default async function ConfirmationPage({ searchParams }: PageProps) {
-  const { id } = await searchParams;
-  if (!id) {
+  const { id, emailWarning } = await searchParams;
+  if (!id || !UUID_REGEX.test(id)) {
     notFound();
   }
 
   // Fetch appointment with joins
-  const results = await db
-    .select({
-      appointment: appointments,
-      eventType: eventTypes,
-      consultant: users,
-    })
-    .from(appointments)
-    .innerJoin(eventTypes, eq(appointments.eventTypeId, eventTypes.id))
-    .innerJoin(users, eq(appointments.userId, users.id))
-    .where(eq(appointments.id, id))
-    .limit(1);
+  let result: { appointment: Appointment; eventType: EventType; consultant: User } | undefined;
+  try {
+    const results = await db
+      .select({
+        appointment: appointments,
+        eventType: eventTypes,
+        consultant: users,
+      })
+      .from(appointments)
+      .innerJoin(eventTypes, eq(appointments.eventTypeId, eventTypes.id))
+      .innerJoin(users, eq(appointments.userId, users.id))
+      .where(eq(appointments.id, id))
+      .limit(1);
 
-  const result = results[0];
+    result = results[0];
+  } catch (error) {
+    logger.error({ appointmentId: id, error }, "booking.confirmation_load_failed");
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto max-w-2xl px-4 py-16">
+          <Card>
+            <CardHeader className="text-center">
+              <CardTitle className="text-xl text-destructive">
+                Unable to load confirmation
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-center text-muted-foreground">
+                Your booking may have been successful. Please check your email or try again later.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   if (!result) {
     notFound();
   }
@@ -85,16 +99,22 @@ export default async function ConfirmationPage({ searchParams }: PageProps) {
                 {consultant.displayName ?? consultant.email}
               </p>
               <p>
-                <span className="font-medium">Date:</span> {formatDate(appointment.startTime)}
+                <span className="font-medium">Date:</span> {formatDateFull(appointment.startTime)}
               </p>
               <p>
                 <span className="font-medium">Time:</span> {formatTime(appointment.startTime)} -{" "}
                 {formatTime(appointment.endTime)}
               </p>
             </div>
-            <p className="text-sm text-muted-foreground text-center">
-              A confirmation email has been sent to {appointment.attendeeEmail}
-            </p>
+            {emailWarning === "true" ? (
+              <div className="rounded-md bg-amber-100 dark:bg-amber-900/30 p-3 text-sm text-amber-800 dark:text-amber-200 text-center">
+                Confirmation email could not be sent. Please save these booking details.
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center">
+                A confirmation email has been sent to {appointment.attendeeEmail}
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>

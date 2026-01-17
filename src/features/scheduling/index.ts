@@ -28,6 +28,8 @@ export type {
   NewAppointment,
   NewEventType,
 } from "./models";
+
+export type { User } from "./repository";
 // Note: NewAvailabilityWindow is intentionally not exported - use CreateAvailabilityWindowInput instead
 
 // ============================================================================
@@ -64,6 +66,8 @@ export {
 // ============================================================================
 // Service functions
 // ============================================================================
+export type { BookingEmailData } from "./service";
+
 export {
   createAppointment,
   createAvailabilityWindow,
@@ -71,6 +75,7 @@ export {
   getAvailabilityWindow,
   getAvailabilityWindowsByUser,
   getAvailableSlots,
+  getBookingEmailData,
   updateAvailabilityWindow,
   validateSlotAvailable,
 } from "./service";
