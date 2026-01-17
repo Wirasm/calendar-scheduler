@@ -1,10 +1,19 @@
+import type { InferSelectModel } from "drizzle-orm";
 import { and, eq, gte, lte, ne } from "drizzle-orm";
-
 import { db } from "@/core/database/client";
+import { users } from "@/core/database/schema";
 
 import { SchedulingDatabaseError } from "./errors";
-import type { Appointment, AvailabilityWindow, EventType, NewAvailabilityWindow } from "./models";
+import type {
+  Appointment,
+  AvailabilityWindow,
+  EventType,
+  NewAppointment,
+  NewAvailabilityWindow,
+} from "./models";
 import { appointments, availabilityWindows, eventTypes } from "./models";
+
+export type User = InferSelectModel<typeof users>;
 
 // ============================================================================
 // Availability Window Repository
@@ -126,4 +135,18 @@ export async function findAppointmentsByUserAndDateRange(
     .select()
     .from(appointments)
     .where(and(...conditions));
+}
+
+export async function createAppointment(data: NewAppointment): Promise<Appointment> {
+  const results = await db.insert(appointments).values(data).returning();
+  const appointment = results[0];
+  if (!appointment) {
+    throw new SchedulingDatabaseError("create appointment");
+  }
+  return appointment;
+}
+
+export async function findUserById(id: string): Promise<User | undefined> {
+  const results = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return results[0];
 }
