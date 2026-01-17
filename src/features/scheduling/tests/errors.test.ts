@@ -112,8 +112,11 @@ describe("AppointmentSlotUnavailableError", () => {
 
 describe("AppointmentOutsideAvailabilityError", () => {
   it("creates error with correct message", () => {
-    const error = new AppointmentOutsideAvailabilityError();
-    expect(error.message).toBe("Requested time is outside available hours");
+    const startTime = new Date("2026-01-20T10:00:00Z");
+    const error = new AppointmentOutsideAvailabilityError(startTime);
+    expect(error.message).toBe(
+      `Requested time is outside of available hours: ${startTime.toISOString()}`,
+    );
     expect(error.code).toBe("APPOINTMENT_OUTSIDE_AVAILABILITY");
     expect(error.statusCode).toBe(400);
   });

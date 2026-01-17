@@ -826,7 +826,7 @@ describe("validateSlotAvailable", () => {
     mockRepository.findAvailabilityWindowsByUser.mockResolvedValue([mockMondayWindow]); // Monday 9-12
 
     await expect(validateSlotAvailable(mockEventType.id, startTime)).rejects.toThrow(
-      "outside available hours",
+      "outside of available hours",
     );
   });
 
